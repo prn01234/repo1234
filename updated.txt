@@ -1,0 +1,660 @@
+//8  Write a program to demonstrate the kill system call to send signals between unrelated processes.
+//update
+// sender.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
+int main() {
+    pid_t pid;
+    printf("Enter the PID of receiver process: ");
+    scanf("%d", &pid);
+
+    kill(pid, SIGUSR1); // Send SIGUSR1 to receiver
+    printf("Signal sent to process %d\n", pid);
+
+    return 0;
+}
+
+
+//update
+// receiver.c
+#include <stdio.h>
+#include <signal.h>
+#include <unistd.h>
+
+void handler(int signum) {
+    printf("Received signal %d\n", signum);
+}
+
+int main() {
+    signal(SIGUSR1, handler);
+    printf("Receiver PID: %d\n", getpid());
+
+    while(1) { // Keep running
+        sleep(1);
+    }
+
+    return 0;
+}
+
+
+//37 ftp
+
+sudo apt update
+ 2003  sudo apt install vsftpd
+ 2004  sudo systemctl start vsftpd
+ 2005  sudo systemctl enable vsftpd
+ 2006  sudo systemctl status vsftpd
+ 2007  sudo nano /etc/vsftpd.conf
+ Open it for editing:
+
+sudo nano /etc/vsftpd.conf
+
+Important changes to make:
+
+    Allow local users to log in:
+
+local_enable=YES
+
+Allow file uploads (important if you want upload support):
+
+write_enable=YES
+
+(Optional) To restrict users to their home directories:
+
+chroot_local_user=YES
+
+(Optional) Turn off anonymous access for more security:
+
+anonymous_enable=NO
+ 2008  sudo systemctl restart vsftpd
+ 2009  sudo ufw allow 20/tcp
+ 2010  sudo ufw allow 21/tcp
+ 2011  sudo ufw reload
+ 2012  ftp localhost
+ 
+  sudo adduser anuja
+ 2018  ftp localhost
+ 2019  sudo systemctl restart vsftpd
+ 2020  ftp localhost
+ 2021  sudo chmod a-w /home/anuja
+ 2022  mkdir /home/anuja/ftpfiles
+ 2023  sudo chown anuja:anuja /home/anuja/ftpfiles
+ 2024  sudo systemctl restart vsftpd
+ 2025  ftp localhost
+ 
+ sudo mkdir /home/anuja/ftpfiles
+ 2031  sudo chown anuja:anuja /home/anuja/ftpfiles
+ 2032  ftp localhost
+ check ip of pc using (ifconfig or ip )
+
+#!/bin/bash
+
+# FTP server details
+FTP_SERVER="10.40.5.171"
+FTP_USERNAME="anuja"
+FTP_PASSWORD="1234"
+
+# File to download
+FILE_TO_DOWNLOAD="ftpfiles/sample.txt"
+
+# Check if the file exists on the FTP server
+echo "Checking if file exists on FTP server..."
+lftp -u $FTP_USERNAME,$FTP_PASSWORD -e "set ftp:passive-mode yes; ls $FILE_TO_DOWNLOAD; quit" $FTP_SERVER
+
+if [ $? -eq 0 ]; then
+    # File exists, download it
+    echo "File found, downloading..."
+    lftp -u $FTP_USERNAME,$FTP_PASSWORD -e "set ftp:passive-mode yes; get $FILE_TO_DOWNLOAD -o $FILE_TO_DOWNLOAD; quit" $FTP_SERVER
+    echo "File downloaded successfully."
+else
+    echo "File does not exist or failed to access the file on the FTP server."
+fi
+
+
+
+//39 Write a program to implement reader-writers problem using semaphore
+#include <stdio.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <unistd.h> // for sleep()
+
+#define NUM_READERS 3
+#define NUM_WRITERS 2
+#define OPERATIONS 5  // number of read/write operations before exiting
+
+sem_t mutex, write_block;
+int data = 0, reader_count = 0;
+
+void *reader(void *arg) {
+    int reader_id = *(int *)arg;
+    for (int i = 0; i < OPERATIONS; i++) {
+        sem_wait(&mutex);
+        reader_count++;
+        if (reader_count == 1) {
+            sem_wait(&write_block);
+        }
+        sem_post(&mutex);
+
+        printf("Reader %d read data: %d\n", reader_id, data);
+
+        sem_wait(&mutex);
+        reader_count--;
+        if (reader_count == 0) {
+            sem_post(&write_block);
+        }
+        sem_post(&mutex);
+
+        sleep(1); // sleep for better output readability
+    }
+    pthread_exit(NULL);
+}
+
+void *writer(void *arg) {
+    int writer_id = *(int *)arg;
+    for (int i = 0; i < OPERATIONS; i++) {
+        sem_wait(&write_block);
+        data++;
+        printf("Writer %d wrote data: %d\n", writer_id, data);
+        sem_post(&write_block);
+
+        sleep(2); // sleep for better output readability
+    }
+    pthread_exit(NULL);
+}
+
+int main() {
+    pthread_t readers[NUM_READERS], writers[NUM_WRITERS];
+    int reader_ids[NUM_READERS], writer_ids[NUM_WRITERS];
+    int i;
+
+    // Initialize semaphores
+    sem_init(&mutex, 0, 1);
+    sem_init(&write_block, 0, 1);
+
+    // Create reader threads
+    for (i = 0; i < NUM_READERS; i++) {
+        reader_ids[i] = i + 1;
+        pthread_create(&readers[i], NULL, reader, &reader_ids[i]);
+    }
+
+    // Create writer threads
+    for (i = 0; i < NUM_WRITERS; i++) {
+        writer_ids[i] = i + 1;
+        pthread_create(&writers[i], NULL, writer, &writer_ids[i]);
+    }
+
+    // Join reader threads
+    for (i = 0; i < NUM_READERS; i++) {
+        pthread_join(readers[i], NULL);
+    }
+
+    // Join writer threads
+    for (i = 0; i < NUM_WRITERS; i++) {
+        pthread_join(writers[i], NULL);
+    }
+
+    // Destroy semaphores
+    sem_destroy(&mutex);
+    sem_destroy(&write_block);
+
+    printf("All readers and writers finished. Exiting program.\n");
+
+    return 0;
+}
+
+
+commands:
+gcc -pthread reader_writers.c -o reader_writers
+./reader_writers
+
+
+
+//43 Write a program to demonstrate IPC using shared memory (shmget, shmat, shmdt). In this, one process will take numbers as input from user and second process will sort the numbers and put back to shared memory. Third process will display the shared memory.
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/wait.h>
+
+#define SHM_SIZE 1024  // Shared memory size (in bytes)
+
+int main() {
+    int shmid;
+    key_t key;
+    int *shm;
+
+    // Create a unique key
+    key = ftok(".", 's');
+    if (key == -1) {
+        perror("ftok");
+        exit(1);
+    }
+
+    // Create the shared memory segment
+    shmid = shmget(key, SHM_SIZE, IPC_CREAT | 0666);
+    if (shmid == -1) {
+        perror("shmget");
+        exit(1);
+    }
+
+    // Attach to the shared memory
+    shm = shmat(shmid, NULL, 0);
+    if (shm == (int *) -1) {
+        perror("shmat");
+        exit(1);
+    }
+
+    // Fork a child process to take input from the user
+    pid_t pid_input = fork();
+
+    if (pid_input == -1) {
+        perror("fork");
+        exit(1);
+    }
+
+    if (pid_input == 0) { // Child process (input)
+        printf("Enter the number of elements: ");
+        int num_elements;
+        scanf("%d", &num_elements);
+
+        // Ensure the number of elements doesn't exceed the shared memory size
+        if (num_elements * sizeof(int) > SHM_SIZE) {
+            printf("Error: The number of elements exceeds the shared memory size.\n");
+            exit(1);
+        }
+
+        printf("Enter %d numbers:\n", num_elements);
+        for (int i = 0; i < num_elements; i++) {
+            scanf("%d", &shm[i]);
+        }
+
+        // Detach from the shared memory
+        if (shmdt(shm) == -1) {
+            perror("shmdt");
+            exit(1);
+        }
+
+        exit(0);
+    } else { // Parent process (sort)
+        wait(NULL); // Wait for the input process to complete
+
+        // Fork another child process to sort the numbers
+        pid_t pid_sort = fork();
+
+        if (pid_sort == -1) {
+            perror("fork");
+            exit(1);
+        }
+
+        if (pid_sort == 0) { // Child process (sort)
+            int num_elements;
+            // Reattach to shared memory
+            shm = shmat(shmid, NULL, 0);
+            if (shm == (int *) -1) {
+                perror("shmat");
+                exit(1);
+            }
+
+            // Get the number of elements from shared memory
+            printf("Enter the number of elements again for sorting: ");
+            scanf("%d", &num_elements);
+
+            // Sort the numbers using bubble sort
+            for (int i = 0; i < num_elements; i++) {
+                for (int j = 0; j < num_elements - i - 1; j++) {
+                    if (shm[j] > shm[j + 1]) {
+                        int temp = shm[j];
+                        shm[j] = shm[j + 1];
+                        shm[j + 1] = temp;
+                    }
+                }
+            }
+
+            // Detach from the shared memory
+            if (shmdt(shm) == -1) {
+                perror("shmdt");
+                exit(1);
+            }
+
+            exit(0);
+        } else { // Parent process (display)
+            wait(NULL); // Wait for the sort process to complete
+
+            // Fork another child process to display the sorted numbers
+            pid_t pid_display = fork();
+
+            if (pid_display == -1) {
+                perror("fork");
+                exit(1);
+            }
+
+            if (pid_display == 0) { // Child process (display)
+                int num_elements;
+                // Reattach to shared memory
+                shm = shmat(shmid, NULL, 0);
+                if (shm == (int *) -1) {
+                    perror("shmat");
+                    exit(1);
+                }
+
+                // Get the number of elements from shared memory
+                printf("Enter the number of elements again for display: ");
+                scanf("%d", &num_elements);
+
+                printf("Sorted numbers:\n");
+                for (int i = 0; i < num_elements; i++) {
+                    printf("%d ", shm[i]);
+                }
+                printf("\n");
+
+                // Detach from the shared memory
+                if (shmdt(shm) == -1) {
+                    perror("shmdt");
+                    exit(1);
+                }
+
+                exit(0);
+            }
+        }
+    }
+
+    // Wait for all child processes to complete
+    wait(NULL);
+    wait(NULL);
+    wait(NULL);
+
+    // Remove the shared memory segment
+    shmctl(shmid, IPC_RMID, NULL);
+
+    return 0;
+}
+
+
+//54 implement echo server using UDP in iterative/concurrent logic.
+//client
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+
+
+#define PORT 9999
+#define BUFFER_SIZE 4096
+
+
+int main() {
+        struct sockaddr_in server_addr;
+        int sockfd;
+        char buffer[BUFFER_SIZE];
+        socklen_t server_len;
+
+
+        // Create a UDP socket
+        if ((sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
+            perror("socket creation failed");
+            exit(EXIT_FAILURE);
+        }
+
+
+        // Initialize server address structure
+        memset(&server_addr, 0, sizeof(server_addr));
+        server_addr.sin_family = AF_INET;
+        server_addr.sin_addr.s_addr = INADDR_ANY;
+        server_addr.sin_port = htons(PORT);
+
+
+        while (1) {
+            printf("Enter message to send (type 'exit' to quit): ");
+            fgets(buffer, BUFFER_SIZE, stdin);
+
+
+            // Remove newline character from the input
+            buffer[strcspn(buffer, "\n")] = 0;
+
+
+            if (strcmp(buffer, "exit") == 0) {
+                break;
+            }
+
+
+            // Send message to the server
+            server_len = sizeof(server_addr);
+            if (sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr*)&server_addr, server_len) < 0) {
+                perror("sendto failed");
+                exit(EXIT_FAILURE);
+            }
+
+
+            // Receive response from server
+            if (recvfrom(sockfd, buffer, BUFFER_SIZE, 0, NULL, NULL) < 0) {
+                perror("recvfrom failed");
+                exit(EXIT_FAILURE);
+            }
+
+
+            printf("Received response: %s\n", buffer);
+        }
+
+
+        // Close the socket
+        close(sockfd);
+
+
+        return 0;
+}
+
+//server
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+
+
+#define PORT 9999
+#define BUFFER_SIZE 4096
+
+
+int main() {
+        struct sockaddr_in server_addr, client_addr;
+        int sockfd, client_len, recv_len;
+        char buffer[BUFFER_SIZE];
+
+
+        // Create a UDP socket
+        if ((sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
+            perror("socket creation failed");
+            exit(EXIT_FAILURE);
+        }
+
+
+        // Initialize server address structure
+        memset(&server_addr, 0, sizeof(server_addr));
+        server_addr.sin_family = AF_INET;
+        server_addr.sin_addr.s_addr = INADDR_ANY;
+        server_addr.sin_port = htons(PORT);
+
+
+        // Bind the socket
+        if (bind(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+            perror("bind failed");
+            exit(EXIT_FAILURE);
+        }
+
+
+        printf("Server is running on port %d\n", PORT);
+
+
+        while (1) {
+            printf("\nWaiting to receive message...\n");
+
+
+            // Receive message from client
+            client_len = sizeof(client_addr);
+            if ((recv_len = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&client_addr, &client_len)) < 0) {
+                perror("recvfrom failed");
+                exit(EXIT_FAILURE);
+            }
+
+
+            printf("Received %d bytes from %s:%d\n", recv_len, inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+            printf("Data received: %s\n", buffer);
+
+
+            // Echo back the received data
+            if (sendto(sockfd, buffer, recv_len, 0, (struct sockaddr*)&client_addr, client_len) < 0) {
+                perror("sendto failed");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+
+        return 0;
+}
+
+
+//50 Write a 2 programs that will both send and messages and construct the following dialog between them
+//sender
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+
+#define MAX 100
+
+// Structure for message
+struct msg_buffer {
+    long msg_type;
+    char msg_text[MAX];
+};
+
+int main() {
+    key_t key;
+    int msgid;
+    struct msg_buffer message;
+
+    // Generate unique key
+    key = ftok("msgfile", 65);
+    if (key == -1) {
+        perror("ftok failed");
+        exit(1);
+    }
+
+    // Create message queue
+    msgid = msgget(key, 0666 | IPC_CREAT);
+    if (msgid == -1) {
+        perror("msgget failed");
+        exit(1);
+    }
+
+    // Step 1: Send "Are you hearing me?" to Process 2 (type 1)
+    message.msg_type = 1;
+    strcpy(message.msg_text, "Are you hearing me?");
+    if (msgsnd(msgid, &message, sizeof(message.msg_text), 0) == -1) {
+        perror("msgsnd failed");
+        exit(1);
+    }
+    printf("Process 1 sent: %s\n", message.msg_text);
+
+    // Step 3: Receive reply from Process 2 (type 2)
+    if (msgrcv(msgid, &message, sizeof(message.msg_text), 2, 0) == -1) {
+        perror("msgrcv failed");
+        exit(1);
+    }
+    printf("Process 1 received: %s\n", message.msg_text);
+
+    // Step 4: Reply "I can hear you too" (type 2)
+    strcpy(message.msg_text, "I can hear you too");
+    message.msg_type = 2;
+    if (msgsnd(msgid, &message, sizeof(message.msg_text), 0) == -1) {
+        perror("msgsnd failed");
+        exit(1);
+    }
+    printf("Process 1 sent: %s\n", message.msg_text);
+
+    // Clean up: Remove message queue (done in Process 2)
+    // msgctl(msgid, IPC_RMID, NULL); // This is now removed from Process 1
+
+    return 0;
+}
+
+
+//receiver
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+
+#define MAX 100
+
+// Structure for message
+struct msg_buffer {
+    long msg_type;
+    char msg_text[MAX];
+};
+
+int main() {
+    key_t key;
+    int msgid;
+    struct msg_buffer message;
+
+    // Generate the same key
+    key = ftok("msgfile", 65);
+    if (key == -1) {
+        perror("ftok failed");
+        exit(1);
+    }
+
+    // Access the message queue
+    msgid = msgget(key, 0666);
+    if (msgid == -1) {
+        perror("msgget failed");
+        exit(1);
+    }
+
+    // Step 2: Receive from Process 1 (type 1)
+    if (msgrcv(msgid, &message, sizeof(message.msg_text), 1, 0) == -1) {
+        perror("msgrcv failed");
+        exit(1);
+    }
+    printf("Process 2 received: %s\n", message.msg_text);
+
+    // Step 2: Reply "Loud and Clear" (type 2)
+    message.msg_type = 2;
+    strcpy(message.msg_text, "Loud and Clear");
+    if (msgsnd(msgid, &message, sizeof(message.msg_text), 0) == -1) {
+        perror("msgsnd failed");
+        exit(1);
+    }
+    printf("Process 2 sent: %s\n", message.msg_text);
+
+    // Step 5: Receive the final reply from Process 1 (type 2)
+    if (msgrcv(msgid, &message, sizeof(message.msg_text), 2, 0) == -1) {
+        perror("msgrcv failed");
+        exit(1);
+    }
+    printf("Process 2 received: %s\n", message.msg_text);
+
+    // Clean up: Remove message queue
+    if (msgctl(msgid, IPC_RMID, NULL) == -1) {
+        perror("msgctl failed");
+        exit(1);
+    }
+
+    return 0;
+}
+
+
